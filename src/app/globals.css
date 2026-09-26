@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #16202a;
+  --color-ink-soft: #4a5a6a;
+  --color-ink-faint: #8394a4;
+  --color-paper: #ffffff;
+  --color-shell: #f2f4f6;
+  --color-line: #dfe4e9;
+
+  --color-fit: #0f7b52;
+  --color-fit-soft: #e4f2ec;
+  --color-locked: #b06f0e;
+  --color-locked-soft: #fdf1dc;
+  --color-alert: #b3261e;
+
+  --color-brand: #1d3c58;
+  --color-brand-deep: #12283b;
+
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 6px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--color-shell);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-feature-settings: "cv05", "ss01";
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-brand);
+    outline-offset: 2px;
+  }
+}
+
+.resume-sheet {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 16mm;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .resume-sheet {
+    width: 100%;
+    min-height: auto;
+    box-shadow: none !important;
+  }
+}
