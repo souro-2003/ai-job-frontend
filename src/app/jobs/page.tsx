@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Search, SlidersHorizontal } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Search, Target, X } from "lucide-react";
 import api from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
 import JobCard from "@/components/JobCard";
@@ -24,6 +24,27 @@ const TYPES = [
   { value: "INTERNSHIP", label: "Internship" },
 ];
 
+const WORK_SITES = [
+  { value: "", label: "Any work site" },
+  { value: "remote", label: "Remote" },
+  { value: "onsite", label: "On-site" },
+];
+
+const COUNTRIES = [
+  { value: "", label: "Any country" },
+  { value: "India", label: "India" },
+  { value: "United Kingdom", label: "United Kingdom" },
+  { value: "United States", label: "United States" },
+  { value: "United Arab Emirates", label: "UAE" },
+  { value: "Singapore", label: "Singapore" },
+];
+
+/** Candidates see jobs at or above this fit score unless they ask for all. */
+const FIT_THRESHOLD = 60;
+
+const fieldClass =
+  "w-full min-w-0 rounded border border-line bg-paper px-2.5 py-1.5 text-sm text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none";
+
 export default function JobsPage() {
   const user = useAuthStore((state) => state.user);
 
@@ -32,14 +53,21 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [search, setSearch] = useState("");
-  const [city, setCity] = useState("");
-  const [level, setLevel] = useState("");
-  const [jobType, setJobType] = useState("");
-  const [remoteOnly, setRemoteOnly] = useState(false);
+  // Draft values the user is typing; applied values drive the request.
+  const [draft, setDraft] = useState({
+    search: "",
+    city: "",
+    state: "",
+    country: "",
+    level: "",
+    jobType: "",
+    workSite: "",
+  });
+  const [applied, setApplied] = useState(draft);
+
   const [sort, setSort] = useState("recent");
   const [page, setPage] = useState(1);
-  const [showFilters, setShowFilters] = useState(false);
+  const [fitOnly, setFitOnly] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -49,12 +77,14 @@ export default function JobsPage() {
       const { data } = await api.get("/jobs", {
         params: {
           page,
-          search: search || undefined,
-          city: city || undefined,
-          level: level || undefined,
-          jobType: jobType || undefined,
-          remote: remoteOnly ? "true" : undefined,
           sort,
+          search: applied.search || undefined,
+          city: applied.city || undefined,
+          state: applied.state || undefined,
+          country: applied.country || undefined,
+          level: applied.level || undefined,
+          jobType: applied.jobType || undefined,
+          workSite: applied.workSite || undefined,
         },
       });
       setJobs(data.jobs);
@@ -64,80 +94,124 @@ export default function JobsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, city, level, jobType, remoteOnly, sort]);
+  }, [page, sort, applied]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  function handleSearch(event: React.FormEvent) {
-    event.preventDefault();
+  const set = (key: keyof typeof draft, value: string) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
+
+  /** Dropdowns apply straight away; text inputs wait for Search or blur. */
+  const setAndApply = (key: keyof typeof draft, value: string) => {
+    const next = { ...draft, [key]: value };
+    setDraft(next);
+    setApplied(next);
     setPage(1);
-    void load();
-  }
+  };
+
+  const applySearch = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    setApplied(draft);
+    setPage(1);
+  };
+
+  const clearAll = () => {
+    const empty = {
+      search: "",
+      city: "",
+      state: "",
+      country: "",
+      level: "",
+      jobType: "",
+      workSite: "",
+    };
+    setDraft(empty);
+    setApplied(empty);
+    setPage(1);
+  };
+
+  const activeCount = Object.entries(applied).filter(
+    ([key, value]) => key !== "search" && value !== ""
+  ).length;
+
+  // Scores only exist for candidates with enough profile data to match on.
+  const scored = useMemo(() => jobs.filter((job) => job.match), [jobs]);
+  const canFilterByFit = user?.role === "CANDIDATE" && scored.length > 0;
+
+  const visibleJobs = useMemo(() => {
+    if (!canFilterByFit || !fitOnly) return jobs;
+    return jobs.filter((job) => (job.match?.total ?? 0) >= FIT_THRESHOLD);
+  }, [jobs, canFilterByFit, fitOnly]);
+
+  const hiddenCount = jobs.length - visibleJobs.length;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="text-2xl text-ink">Open jobs</h1>
-      <p className="mt-1 text-sm text-ink-soft">
-        {user?.role === "CANDIDATE"
-          ? "Each job shows how well it fits your profile."
-          : "Log in as a candidate to see your fit score on each job."}
-      </p>
+    <div className="mx-auto max-w-[1400px] px-6 py-6">
+      {/* ---------------- filter bar ---------------- */}
+      <form
+        onSubmit={applySearch}
+        className="rounded-card border border-line bg-paper px-3 py-2.5"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[200px] flex-[2]">
+            <Search
+              size={15}
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-faint"
+            />
+            <input
+              value={draft.search}
+              onChange={(e) => set("search", e.target.value)}
+              placeholder="Job title or keyword"
+              className={`${fieldClass} pl-8`}
+            />
+          </div>
 
-      <form onSubmit={handleSearch} className="mt-5 flex gap-2">
-        <div className="relative flex-1">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-faint"
-          />
           <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Job title or keyword"
-            className="w-full rounded border border-line bg-paper py-2 pl-9 pr-3 text-sm text-ink placeholder:text-ink-faint focus:border-brand focus:outline-none"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowFilters(!showFilters)}
-          className="rounded border border-line bg-paper px-3 text-ink-soft hover:bg-shell"
-          aria-label="Filters"
-          aria-expanded={showFilters}
-        >
-          <SlidersHorizontal size={16} />
-        </button>
-        <button
-          type="submit"
-          className="rounded bg-brand px-4 py-2 text-sm font-medium text-paper hover:bg-brand-deep"
-        >
-          Search
-        </button>
-      </form>
-
-      {showFilters && (
-        <div className="mt-3 grid gap-3 rounded-card border border-line bg-paper p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <input
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
+            value={draft.city}
+            onChange={(e) => set("city", e.target.value)}
+            onBlur={() => draft.city !== applied.city && applySearch()}
             placeholder="City"
-            className="rounded border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            className={`${fieldClass} flex-1 basis-[110px]`}
           />
+
+          <input
+            value={draft.state}
+            onChange={(e) => set("state", e.target.value)}
+            onBlur={() => draft.state !== applied.state && applySearch()}
+            placeholder="State"
+            className={`${fieldClass} flex-1 basis-[110px]`}
+          />
+
           <select
-            value={level}
-            onChange={(e) => setLevel(e.target.value)}
-            className="rounded border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            value={draft.country}
+            onChange={(e) => setAndApply("country", e.target.value)}
+            className={`${fieldClass} flex-1 basis-[130px]`}
           >
-            {LEVELS.map((l) => (
-              <option key={l.value} value={l.value}>
-                {l.label}
+            {COUNTRIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
               </option>
             ))}
           </select>
+
           <select
-            value={jobType}
-            onChange={(e) => setJobType(e.target.value)}
-            className="rounded border border-line px-3 py-2 text-sm focus:border-brand focus:outline-none"
+            value={draft.workSite}
+            onChange={(e) => setAndApply("workSite", e.target.value)}
+            className={`${fieldClass} flex-1 basis-[120px]`}
+          >
+            {WORK_SITES.map((w) => (
+              <option key={w.value} value={w.value}>
+                {w.label}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={draft.jobType}
+            onChange={(e) => setAndApply("jobType", e.target.value)}
+            className={`${fieldClass} flex-1 basis-[120px]`}
           >
             {TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -145,22 +219,67 @@ export default function JobsPage() {
               </option>
             ))}
           </select>
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              checked={remoteOnly}
-              onChange={(e) => setRemoteOnly(e.target.checked)}
-              className="rounded border-line"
-            />
-            Remote only
-          </label>
-        </div>
-      )}
 
-      <div className="mt-5 flex items-center justify-between">
-        <p className="text-sm text-ink-soft">
-          {pagination ? `${pagination.total} jobs` : "\u00A0"}
-        </p>
+          <select
+            value={draft.level}
+            onChange={(e) => setAndApply("level", e.target.value)}
+            className={`${fieldClass} flex-1 basis-[110px]`}
+          >
+            {LEVELS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+
+          <button
+            type="submit"
+            className="shrink-0 rounded bg-brand px-4 py-1.5 text-sm font-medium text-paper hover:bg-brand-deep"
+          >
+            Search
+          </button>
+
+          {(activeCount > 0 || applied.search) && (
+            <button
+              type="button"
+              onClick={clearAll}
+              title="Clear filters"
+              className="shrink-0 rounded border border-line p-1.5 text-ink-faint hover:bg-shell hover:text-ink"
+            >
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      </form>
+
+      {/* ---------------- result bar ---------------- */}
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-ink-soft">
+            {loading
+              ? "Loading…"
+              : canFilterByFit && fitOnly
+                ? `${visibleJobs.length} of ${pagination?.total ?? jobs.length} jobs`
+                : `${pagination?.total ?? 0} jobs`}
+          </span>
+
+          {canFilterByFit && (
+            <button
+              onClick={() => setFitOnly(!fitOnly)}
+              className={`inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-xs ${
+                fitOnly
+                  ? "border-brand bg-brand/5 text-brand"
+                  : "border-line text-ink-soft hover:bg-shell hover:text-ink"
+              }`}
+            >
+              <Target size={13} />
+              {fitOnly
+                ? `${FIT_THRESHOLD}%+ fit${hiddenCount > 0 ? ` · ${hiddenCount} hidden` : ""}`
+                : "Showing all"}
+            </button>
+          )}
+        </div>
+
         <select
           value={sort}
           onChange={(e) => {
@@ -175,6 +294,7 @@ export default function JobsPage() {
         </select>
       </div>
 
+      {/* ---------------- results ---------------- */}
       <div className="mt-3 overflow-hidden rounded-card border border-line">
         {loading ? (
           <div className="bg-paper p-10 text-center text-sm text-ink-soft">
@@ -182,15 +302,42 @@ export default function JobsPage() {
           </div>
         ) : error ? (
           <div className="bg-paper p-10 text-center text-sm text-alert">{error}</div>
-        ) : jobs.length === 0 ? (
+        ) : visibleJobs.length === 0 ? (
           <div className="bg-paper p-10 text-center">
-            <p className="text-sm text-ink">No jobs match this search.</p>
-            <p className="mt-1 text-sm text-ink-soft">
-              Try removing a filter or searching a different title.
-            </p>
+            {canFilterByFit && fitOnly && jobs.length > 0 ? (
+              <>
+                <p className="text-sm text-ink">
+                  Nothing here fits you at {FIT_THRESHOLD}% or better.
+                </p>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Add more skills to your profile, or look at the weaker matches.
+                </p>
+                <button
+                  onClick={() => setFitOnly(false)}
+                  className="mt-4 rounded border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-shell"
+                >
+                  Show all {jobs.length} jobs
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-ink">No jobs match this search.</p>
+                <p className="mt-1 text-sm text-ink-soft">
+                  Try removing a filter or searching a different title.
+                </p>
+                {activeCount > 0 && (
+                  <button
+                    onClick={clearAll}
+                    className="mt-4 rounded border border-line px-4 py-2 text-sm font-medium text-ink hover:bg-shell"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </>
+            )}
           </div>
         ) : (
-          jobs.map((job) => <JobCard key={job.id} job={job} />)
+          visibleJobs.map((job) => <JobCard key={job.id} job={job} />)
         )}
       </div>
 

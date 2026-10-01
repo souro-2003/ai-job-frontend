@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Inter } from "next/font/google";
 import "./globals.css";
 import AuthProvider from "@/components/AuthProvider";
 import Navbar from "@/components/Navbar";
+import AssistantWidget from "@/components/AssistantWidget";
 
 const display = Bricolage_Grotesque({
   subsets: ["latin"],
@@ -31,6 +32,8 @@ export default function RootLayout({
         <AuthProvider>
           <Navbar />
           <main>{children}</main>
+          {/* Floating career assistant — renders only for signed-in candidates */}
+          <AssistantWidget />
         </AuthProvider>
       </body>
     </html>

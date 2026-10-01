@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, AlertCircle } from "lucide-react";
+import { ArrowRight, AlertCircle, Plus } from "lucide-react";
 import api, { formatPaise } from "@/lib/api";
 
 interface Dashboard {
@@ -74,10 +74,22 @@ export default function AdminOverviewPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
-      <h1 className="text-2xl text-ink">Overview</h1>
-      <p className="mt-1 text-sm text-ink-soft">
-        Everything happening on the portal right now.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl text-ink">Overview</h1>
+          <p className="mt-1 text-sm text-ink-soft">
+            Everything happening on the portal right now.
+          </p>
+        </div>
+
+        <Link
+          href="/admin/jobs/new"
+          className="inline-flex items-center gap-2 rounded bg-ink px-4 py-2 text-sm font-medium text-paper hover:opacity-90"
+        >
+          <Plus size={16} />
+          Add job
+        </Link>
+      </div>
 
       {data.companies.pending > 0 && (
         <Link
@@ -103,18 +115,18 @@ export default function AdminOverviewPage() {
       <section className="mt-6">
         <h2 className="text-sm font-600 text-ink-soft">People</h2>
         <div className="mt-2 grid gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-4">
-          <div className="bg-paper p-5">
+          <Link href="/admin/users" className="bg-paper p-5 hover:bg-shell/60">
             <div className="text-2xl font-600 text-ink">{data.users.total}</div>
             <div className="mt-0.5 text-sm text-ink-soft">Total users</div>
-          </div>
-          <div className="bg-paper p-5">
+          </Link>
+          <Link href="/admin/users" className="bg-paper p-5 hover:bg-shell/60">
             <div className="text-2xl font-600 text-ink">{data.users.candidates}</div>
             <div className="mt-0.5 text-sm text-ink-soft">Candidates</div>
-          </div>
-          <div className="bg-paper p-5">
+          </Link>
+          <Link href="/admin/users" className="bg-paper p-5 hover:bg-shell/60">
             <div className="text-2xl font-600 text-ink">{data.users.employers}</div>
             <div className="mt-0.5 text-sm text-ink-soft">Employers</div>
-          </div>
+          </Link>
           <div className="bg-paper p-5">
             <div className="text-2xl font-600 text-fit">
               +{data.users.newToday}
@@ -153,7 +165,10 @@ export default function AdminOverviewPage() {
               </span>
             </div>
           </Link>
-          <div className="bg-paper p-5">
+          <Link
+            href="/admin/applications"
+            className="bg-paper p-5 hover:bg-shell/60"
+          >
             <div className="text-2xl font-600 text-ink">
               {data.applications.total}
             </div>
@@ -163,7 +178,7 @@ export default function AdminOverviewPage() {
                 {data.applications.last7Days} this week
               </span>
             </div>
-          </div>
+          </Link>
           <div className="bg-paper p-5">
             <div className="text-2xl font-600 text-ink">{data.resumes.total}</div>
             <div className="mt-0.5 text-sm text-ink-soft">Resumes built</div>

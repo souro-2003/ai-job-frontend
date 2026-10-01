@@ -22,6 +22,10 @@ export default function JobCard({ job }: { job: Job }) {
     ? "Remote"
     : [job.city, job.state].filter(Boolean).join(", ") || "Location not set";
 
+  // Admin-posted jobs carry no Company record, only a typed-in name.
+  const companyLabel =
+    job.company?.name ?? job.companyName ?? "Direct listing";
+
   return (
     <Link
       href={`/jobs/${job.slug}`}
@@ -31,8 +35,8 @@ export default function JobCard({ job }: { job: Job }) {
         <div className="min-w-0">
           <h3 className="truncate text-base font-600 text-ink">{job.title}</h3>
           <p className="mt-0.5 truncate text-sm text-ink-soft">
-            {job.company.name}
-            {job.company.isVerified && (
+            {companyLabel}
+            {job.company?.isVerified && (
               <span className="ml-1.5 text-fit" title="Verified company">
                 ✓
               </span>

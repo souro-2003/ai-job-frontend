@@ -25,6 +25,7 @@ const adminLinks = [
   { href: "/admin/users", label: "Users" },
   { href: "/admin/companies", label: "Companies" },
   { href: "/admin/jobs", label: "Jobs" },
+  { href: "/admin/applications", label: "Applications" },
   { href: "/admin/activity", label: "Activity" },
 ];
 
@@ -61,8 +62,12 @@ export default function Navbar() {
 
         <nav className="hidden flex-1 items-center gap-1 md:flex">
           {links.map((link) => {
+            // "/admin" would otherwise light up on every admin sub-route.
             const active =
-              pathname === link.href || pathname.startsWith(`${link.href}/`);
+              link.href === "/admin"
+                ? pathname === "/admin"
+                : pathname === link.href || pathname.startsWith(`${link.href}/`);
+
             return (
               <Link
                 key={link.href}

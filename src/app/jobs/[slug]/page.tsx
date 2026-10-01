@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -12,10 +12,11 @@ import {
   Sparkles,
   Check,
   X,
+  PartyPopper,
 } from "lucide-react";
 import api, { ApiError, formatSalary, timeAgo } from "@/lib/api";
 import { useAuthStore } from "@/store/authStore";
-import type { Job, MatchBreakdown } from "@/types";
+import type { ApplicationStatus, ApplyAccess, Job, MatchBreakdown } from "@/types";
 
 interface Advice {
   verdict: string;
@@ -33,10 +34,102 @@ const JOB_TYPE_LABEL: Record<string, string> = {
   REMOTE: "Remote",
 };
 
+const STATUS_LABEL: Record<ApplicationStatus, string> = {
+  APPLIED: "Application sent",
+  VIEWED: "Employer viewed your application",
+  SHORTLISTED: "You are shortlisted",
+  INTERVIEW: "Interview stage",
+  REJECTED: "Not selected this time",
+  HIRED: "You are hired",
+};
+
+const STATUS_STYLE: Record<ApplicationStatus, string> = {
+  APPLIED: "bg-shell text-ink-soft",
+  VIEWED: "bg-shell text-ink",
+  SHORTLISTED: "bg-fit-soft text-fit",
+  INTERVIEW: "bg-fit-soft text-fit",
+  REJECTED: "bg-alert/10 text-alert",
+  HIRED: "bg-fit text-paper",
+};
+
+const CONFETTI_CSS = `
+@keyframes jp-fall {
+  0%   { transform: translateY(-12vh) rotate(0deg); opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(104vh) rotate(900deg); opacity: 0; }
+}
+@keyframes jp-pop {
+  0%   { transform: scale(.85); opacity: 0; }
+  55%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.jp-confetti {
+  position: fixed;
+  top: 0;
+  width: 9px;
+  height: 15px;
+  pointer-events: none;
+  z-index: 9999;
+  animation-name: jp-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.jp-pop { animation: jp-pop .45s cubic-bezier(.2,.9,.3,1.3) both; }
+`;
+
+const CONFETTI_COLORS = [
+  "#1d3c58",
+  "#2e9e6b",
+  "#e8b04b",
+  "#d2603f",
+  "#6b5bd2",
+  "#3aa6c9",
+];
+
 function scoreStyle(total: number): string {
   if (total >= 70) return "bg-fit-soft text-fit";
   if (total >= 45) return "bg-locked-soft text-locked";
   return "bg-shell text-ink-soft";
+}
+
+/** Falling confetti — plain CSS animation, no library and no CSS variables. */
+function Confetti({ pieces = 80 }: { pieces?: number }) {
+  const bits = useMemo(
+    () =>
+      Array.from({ length: pieces }, (_, i) => ({
+        id: i,
+        left: Math.random() * 100,
+        delay: Math.random() * 1.8,
+        duration: 2.6 + Math.random() * 2.4,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        round: Math.random() > 0.7,
+        width: 7 + Math.random() * 5,
+      })),
+    [pieces]
+  );
+
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 overflow-hidden"
+      style={{ zIndex: 9999 }}
+    >
+      {bits.map((b) => (
+        <span
+          key={b.id}
+          className="jp-confetti"
+          style={{
+            left: `${b.left}%`,
+            width: `${b.width}px`,
+            background: b.color,
+            borderRadius: b.round ? "50%" : "2px",
+            animationDelay: `${b.delay}s`,
+            animationDuration: `${b.duration}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
 }
 
 export default function JobDetailPage() {
@@ -46,6 +139,9 @@ export default function JobDetailPage() {
   const [job, setJob] = useState<Job | null>(null);
   const [match, setMatch] = useState<MatchBreakdown | null>(null);
   const [hasApplied, setHasApplied] = useState(false);
+  const [applicationStatus, setApplicationStatus] =
+    useState<ApplicationStatus | null>(null);
+  const [access, setAccess] = useState<ApplyAccess | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [coverLetter, setCoverLetter] = useState("");
@@ -57,6 +153,8 @@ export default function JobDetailPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const [celebrate, setCelebrate] = useState(false);
+
   const [advice, setAdvice] = useState<Advice | null>(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
 
@@ -67,6 +165,8 @@ export default function JobDetailPage() {
         setJob(data.job);
         setMatch(data.match);
         setHasApplied(data.hasApplied);
+        setApplicationStatus(data.applicationStatus ?? null);
+        setAccess(data.access ?? null);
       } catch {
         setError("This job could not be found.");
       } finally {
@@ -75,6 +175,15 @@ export default function JobDetailPage() {
     }
     void load();
   }, [params.slug]);
+
+  // Celebrate every time the candidate opens a job they were hired for.
+  useEffect(() => {
+    if (applicationStatus !== "HIRED") return;
+
+    setCelebrate(true);
+    const timer = window.setTimeout(() => setCelebrate(false), 7000);
+    return () => window.clearTimeout(timer);
+  }, [applicationStatus]);
 
   async function apply() {
     if (!job) return;
@@ -89,6 +198,7 @@ export default function JobDetailPage() {
         coverLetter: coverLetter || undefined,
       });
       setHasApplied(true);
+      setApplicationStatus("APPLIED");
       setShowApply(false);
       setMessage("Application sent.");
     } catch (err) {
@@ -149,8 +259,28 @@ export default function JobDetailPage() {
 
   const isCandidate = user?.role === "CANDIDATE";
 
+  // Admin-posted jobs have no Company record, only a typed-in name.
+  const companyLabel = job.company?.name ?? job.companyName ?? "Direct listing";
+
+  const isHired = applicationStatus === "HIRED";
+
+  const needsPlan = isCandidate && access !== null && !access.canApply;
+  const planGateCopy =
+    access?.reason === "RESUME_REQUIRED"
+      ? "Build a resume first — it starts from your profile, so it takes a minute."
+      : access?.reason === "APPLY_LIMIT_REACHED"
+        ? "You have used every application on your current plan. Upgrade to keep applying."
+        : "Applying is on the Basic and Pro plans. Buy one to send your resume to this employer.";
+  const planGateCta =
+    access?.reason === "RESUME_REQUIRED" ? "Build a resume" : "See plans";
+  const planGateHref =
+    access?.reason === "RESUME_REQUIRED" ? "/resumes" : "/pricing";
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
+      <style>{CONFETTI_CSS}</style>
+      {celebrate && <Confetti />}
+
       <Link
         href="/jobs"
         className="inline-flex items-center gap-1.5 text-sm text-ink-soft hover:text-ink"
@@ -159,17 +289,53 @@ export default function JobDetailPage() {
         All jobs
       </Link>
 
+      {/* Hired banner */}
+      {isHired && (
+        <div className="jp-pop mt-4 overflow-hidden rounded-card border border-fit/30 bg-fit-soft p-6 text-center">
+          <PartyPopper size={28} className="mx-auto text-fit" />
+          <h2 className="mt-3 text-xl font-600 text-ink">
+            Congratulations, {user?.fullName?.split(" ")[0] ?? "you"}!
+          </h2>
+          <p className="mt-1.5 text-sm text-ink-soft">
+            {companyLabel} has hired you for {job.title}. They will be in touch
+            about the next steps.
+          </p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <Link
+              href="/applications"
+              className="rounded bg-fit px-4 py-2 text-sm font-medium text-paper hover:opacity-90"
+            >
+              See all applications
+            </Link>
+            <button
+              onClick={() => {
+                setCelebrate(false);
+                window.setTimeout(() => setCelebrate(true), 50);
+              }}
+              className="rounded border border-fit/40 px-4 py-2 text-sm font-medium text-fit hover:bg-fit/10"
+            >
+              Celebrate again
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 rounded-card border border-line bg-paper p-6">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <h1 className="text-2xl text-ink">{job.title}</h1>
-            <Link
-              href={`/companies/${job.company.slug}`}
-              className="mt-1 inline-block text-sm text-ink-soft hover:text-ink"
-            >
-              {job.company.name}
-              {job.company.isVerified && <span className="ml-1.5 text-fit">✓</span>}
-            </Link>
+
+            {job.company ? (
+              <Link
+                href={`/companies/${job.company.slug}`}
+                className="mt-1 inline-block text-sm text-ink-soft hover:text-ink"
+              >
+                {job.company.name}
+                {job.company.isVerified && <span className="ml-1.5 text-fit">✓</span>}
+              </Link>
+            ) : (
+              <p className="mt-1 text-sm text-ink-soft">{companyLabel}</p>
+            )}
           </div>
 
           {match && (
@@ -206,19 +372,37 @@ export default function JobDetailPage() {
           {job.vacancies === 1 ? "" : "s"} · {job.views} views
         </p>
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-5 flex flex-wrap items-center gap-2">
           {hasApplied ? (
-            <span className="inline-flex items-center gap-1.5 rounded bg-fit-soft px-4 py-2 text-sm font-medium text-fit">
-              <Check size={15} />
-              You have applied
+            <span
+              className={`inline-flex items-center gap-1.5 rounded px-4 py-2 text-sm font-medium ${
+                applicationStatus
+                  ? STATUS_STYLE[applicationStatus]
+                  : "bg-fit-soft text-fit"
+              }`}
+            >
+              {isHired ? <PartyPopper size={15} /> : <Check size={15} />}
+              {applicationStatus
+                ? STATUS_LABEL[applicationStatus]
+                : "You have applied"}
             </span>
           ) : isCandidate ? (
-            <button
-              onClick={() => setShowApply(true)}
-              className="rounded bg-brand px-5 py-2 text-sm font-medium text-paper hover:bg-brand-deep"
-            >
-              Apply for this job
-            </button>
+            needsPlan ? (
+              <Link
+                href={planGateHref}
+                className="inline-flex items-center gap-1.5 rounded bg-locked px-5 py-2 text-sm font-medium text-paper hover:opacity-90"
+              >
+                <Lock size={15} />
+                {planGateCta} to apply
+              </Link>
+            ) : (
+              <button
+                onClick={() => setShowApply(true)}
+                className="rounded bg-brand px-5 py-2 text-sm font-medium text-paper hover:bg-brand-deep"
+              >
+                Apply for this job
+              </button>
+            )
           ) : !user ? (
             <Link
               href="/signup"
@@ -228,7 +412,7 @@ export default function JobDetailPage() {
             </Link>
           ) : null}
 
-          {isCandidate && match && (
+          {isCandidate && match && !isHired && (
             <button
               onClick={getAdvice}
               disabled={adviceLoading}
@@ -238,8 +422,40 @@ export default function JobDetailPage() {
               {adviceLoading ? "Thinking…" : "Should I apply?"}
             </button>
           )}
+
+          {access?.canApply && access.appliesRemaining !== null && !hasApplied && (
+            <span className="text-xs text-ink-faint">
+              {access.appliesRemaining} application
+              {access.appliesRemaining === 1 ? "" : "s"} left on {access.planName}
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Plan gate shown before the candidate even tries */}
+      {needsPlan && !locked && !hasApplied && (
+        <div className="mt-4 rounded-card border border-locked/30 bg-locked-soft p-5">
+          <div className="flex items-start gap-3">
+            <Lock size={18} className="mt-0.5 shrink-0 text-locked" />
+            <div>
+              <h2 className="text-base font-600 text-ink">
+                {access?.reason === "RESUME_REQUIRED"
+                  ? "You need a resume before applying"
+                  : access?.reason === "APPLY_LIMIT_REACHED"
+                    ? "No applications left on your plan"
+                    : "Buy a plan to apply"}
+              </h2>
+              <p className="mt-1 text-sm text-ink-soft">{planGateCopy}</p>
+              <Link
+                href={planGateHref}
+                className="mt-3 inline-block rounded bg-locked px-4 py-2 text-sm font-medium text-paper hover:opacity-90"
+              >
+                {planGateCta}
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {message && (
         <p className="mt-4 rounded border border-fit/30 bg-fit-soft px-3 py-2 text-sm text-fit">

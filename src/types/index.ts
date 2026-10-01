@@ -127,9 +127,20 @@ export interface Job {
   vacancies: number;
   views: number;
   isActive?: boolean;
+  isFeatured?: boolean;
   expiresAt?: string | null;
   createdAt: string;
-  company: Company;
+
+  /**
+   * Null for jobs the admin posted directly — those carry companyName instead.
+   * Always read it as job.company?.name ?? job.companyName.
+   */
+  company: Company | null;
+  companyName?: string | null;
+  companyWebsite?: string | null;
+  applyUrl?: string | null;
+  displayCompany?: string;
+
   skills: Array<{
     skillId: string;
     isRequired: boolean;
@@ -138,6 +149,16 @@ export interface Job {
   }>;
   _count?: { applications: number };
   match?: MatchBreakdown;
+}
+
+/** Why the apply button is locked for this candidate, from GET /jobs/:slug. */
+export interface ApplyAccess {
+  canApply: boolean;
+  reason: "NO_ACTIVE_PLAN" | "APPLY_LIMIT_REACHED" | "RESUME_REQUIRED" | null;
+  planName: string | null;
+  planTier: PlanTier | null;
+  appliesRemaining: number | null;
+  hasResume: boolean;
 }
 
 export interface Application {
