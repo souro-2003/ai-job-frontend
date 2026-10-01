@@ -35,14 +35,6 @@ const TEMPLATES = [
   { value: "minimal", label: "Minimal", atsSafe: true },
 ];
 
-const SECTIONS = [
-  { id: "contact", label: "Contact" },
-  { id: "summary", label: "Summary" },
-  { id: "skills", label: "Skills" },
-  { id: "experience", label: "Experience" },
-  { id: "education", label: "Education" },
-];
-
 /** A4 width in CSS pixels, which is what .resume-sheet is laid out at. */
 const SHEET_WIDTH = 794;
 const SHEET_HEIGHT = 1123;
@@ -56,6 +48,7 @@ const PRINT_CSS = `
     inset: 0 auto auto 0;
     width: 100% !important;
     height: auto !important;
+    max-height: none !important;
     margin: 0 !important;
     overflow: visible !important;
     box-shadow: none !important;
@@ -64,6 +57,7 @@ const PRINT_CSS = `
   #resume-print-scale {
     transform: none !important;
     width: auto !important;
+    margin-bottom: 0 !important;
   }
   @page { margin: 12mm; }
 }
@@ -400,7 +394,7 @@ export default function ResumeEditorPage() {
             }`}
           />
           <span className="flex-1 font-display text-base font-600 text-ink">{heading}</span>
-          {hint && <span className="text-xs text-ink-faint">{hint}</span>}
+          {hint && <span className="truncate text-xs text-ink-faint">{hint}</span>}
           <ChevronDown
             size={16}
             className={`shrink-0 text-ink-faint transition-transform ${open ? "rotate-180" : ""}`}
@@ -458,6 +452,13 @@ export default function ResumeEditorPage() {
               </option>
             ))}
           </select>
+
+          <Link
+            href={`/resumes/${resumeId}/preview`}
+            className="rounded border border-line px-3 py-1.5 text-sm font-medium text-ink hover:bg-shell"
+          >
+            Full preview
+          </Link>
 
           <button
             onClick={() => window.print()}
@@ -839,7 +840,12 @@ export default function ResumeEditorPage() {
               <span className="text-xs text-ink-faint">
                 Live preview — {TEMPLATES.find((t) => t.value === template)?.label}
               </span>
-              <span className={`text-xs ${atsTone}`}>ATS {atsScore}</span>
+              <Link
+                href={`/resumes/${resumeId}/preview`}
+                className="text-xs text-brand hover:underline"
+              >
+                Open full size
+              </Link>
             </div>
 
             <div
